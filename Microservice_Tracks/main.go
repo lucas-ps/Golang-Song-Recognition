@@ -2,6 +2,9 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 
@@ -10,6 +13,16 @@ import (
 )
 
 var db *sql.DB
+
+/* Struct to represent the body of a request */
+type Body struct {
+	Input string `json:"@input"`
+}
+
+type Song_json struct {
+	ID    string
+	Audio string
+}
 
 func main() {
 	// Connection to SQLite database file in the current directory
@@ -26,34 +39,55 @@ func main() {
 func Router() http.Handler {
 	r := mux.NewRouter()
 	/* Create */
-	r.HandleFunc("/tracks/{name}/{audio}", Create).Methods("PUT")
-	r.HandleFunc("/tracks/{name}", BadRequest).Methods("PUT")
+	r.HandleFunc("/tracks/{Id}", Create).Methods("PUT")
 	r.HandleFunc("/tracks/", NoContent).Methods("PUT")
 	/* List */
 	r.HandleFunc("/tracks", List).Methods("GET")
 	/* Read */
-	r.HandleFunc("/tracks/{name}", Read).Methods("GET")
+	r.HandleFunc("/tracks/{Id}", Read).Methods("GET")
 	/* Delete */
-	r.HandleFunc("/tracks/{name}", Delete).Methods("DELETE")
+	r.HandleFunc("/tracks/{Id}", Delete).Methods("DELETE")
 	return r
 }
 
-func BadRequest(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusBadRequest) } /* 400 */
-func NoContent(w http.ResponseWriter, r *http.Request)  { w.WriteHeader(http.StatusNoContent) }  /* 204 */
+func NoContent(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) } /* 204 */
 
 func Create(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	name := vars["name"]
-	audio := vars["audio"]
+	/* fmt.Println(vars) */
+
+	if len(vars) == 0 {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	} /* 204 */
+
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Error reading request body", http.StatusBadRequest)
+		return
+	} /* 400 */
+
+	/* parse the request body as JSON */
+	var requestBody Body
+	err = json.Unmarshal(body, &requestBody)
+	if err != nil {
+		http.Error(w, "Error parsing request body", http.StatusBadRequest)
+		return
+	}
+
+	// extract the value of the @input parameter from the request body
+	inputValue := requestBody.Input
+	fmt.Println("@input value:", inputValue)
 
 	query, err := db.Prepare("INSERT INTO tracks (name, song) VALUES (?, ?)")
 	defer query.Close()
 
-	_, err = query.Exec(name, audio)
+	// TODO: this doesn't work :(
+	/*_, err = query.Exec(name, audio)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError) /* 500 */
-		return
-	}
+	//return
+	//}
 	w.WriteHeader(http.StatusCreated)
 }
 
@@ -86,18 +120,56 @@ func List(w http.ResponseWriter, r *http.Request) {
 }
 
 func Read(w http.ResponseWriter, r *http.Request) {
-	/*vars := mux.Vars(r)
-	  name := vars["name"]*/
+	vars := mux.Vars(r)
+	name := vars["Id"]
 
-	w.WriteHeader(http.StatusOK)                  /* 200 OK, return JSON object with ID and Base64 WAV */
-	w.WriteHeader(http.StatusNotFound)            /* 404 Not Found */
-	w.WriteHeader(http.StatusInternalServerError) /* 500 Internal Server Error */
+	if len(vars) == 0 {
+		w.WriteHeader(http.StatusNoContent) /* 204 */
+		return
+	}
+
+	var song string
+	err := db.QueryRow("SELECT song FROM tracks WHERE name = ?", name).Scan(&song)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Track not found", http.StatusNotFound) /* 404 */
+			return
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError) /* 500 */
+			return
+		}
+	}
+
+	/* Create JSON object with fetched song, convert to JSON bytes so it can be included in HTTP response*/
+	json_response := Song_json{ID: name, Audio: song}
+	jsonBytes, err := json.Marshal(json_response)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError) /* 500 */
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(jsonBytes)
+	w.WriteHeader(http.StatusOK) /* 200 OK, return JSON object with ID and Base64 WAV */
 }
 
 func Delete(w http.ResponseWriter, r *http.Request) {
-	/*vars := mux.Vars(r)
-	  name := vars["name"]*/
+	vars := mux.Vars(r)
+	name := vars["Id"]
 
+	if name == "" {
+		w.WriteHeader(http.StatusBadRequest) /* 400 */
+		return
+	}
+
+	query, err := db.Exec("DELETE FROM tracks WHERE name = ?", name)
+	rowsAffected, err := query.RowsAffected()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError) /* 500 */
+		return
+	}
+	if rowsAffected == 0 {
+		http.Error(w, "Item not found", http.StatusNotFound) /* 404 */
+		return
+	}
 	w.WriteHeader(http.StatusNoContent) /* 204 No Content */
-	w.WriteHeader(http.StatusNotFound)  /* 404 Not Found */
 }

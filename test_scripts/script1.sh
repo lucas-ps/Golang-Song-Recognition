@@ -1,7 +1,7 @@
 #!/bin/sh
-ID="Everybody+(Backstreets+Back)+(Radio+Edit)"
+ID="a"
 ESCAPED=`perl -e "use URI::Escape; print uri_escape(\"$ID\")"`
-AUDIO=`base64 -i "$ID".wav`
+AUDIO=`test`
 RESOURCE=localhost:3000/tracks/$ESCAPED
 echo "{ \"Id\":\"$ID\", \"Audio\":\"$AUDIO\" }" > input
-curl -v -X PUT -d @input $RESOURCE 
+curl -v -X PUT -d @input $RESOURCE  
