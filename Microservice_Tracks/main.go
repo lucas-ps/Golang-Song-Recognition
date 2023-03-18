@@ -4,9 +4,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/gorilla/mux"
 	_ "github.com/mattn/go-sqlite3"
@@ -19,21 +19,49 @@ type Body struct {
 	Input string `json:"@input"`
 }
 
-type Song_json struct {
-	ID    string
+type Track struct {
+	Name  string
 	Audio string
 }
 
+type Track_json struct {
+	Id    string `json:"Id"`
+	Audio string `json:"Audio"`
+}
+
 func main() {
-	// Connection to SQLite database file in the current directory
+	// Delete existing database
+	if _, err := os.Stat("./tracks.db"); err == nil {
+		if err := os.Remove("./tracks.db"); err != nil {
+			fmt.Printf("Error deleting existing database: %v\n", err)
+			return
+		}
+		//fmt.Printf("Existing database deleted\n")
+	}
+
+	// Create database file in the current directory
 	var err error
 	db, err = sql.Open("sqlite3", "./tracks.db")
 	if err != nil {
 		panic(err)
 	}
+	defer db.Close()
+
+	// Create tracks table
+	_, err = db.Exec("CREATE TABLE Tracks (Name TEXT PRIMARY KEY, Audio TEXT)")
+	if err != nil {
+		log.Fatal(err)
+	}
+	//fmt.Println("Tracks DB created successfully")
+
+	// Add test record
+	/*_, err = db.Exec("INSERT INTO Tracks (Name, Audio) VALUES ('test', 'test');")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Test track record created successfully")*/
 
 	log.Fatal(http.ListenAndServe(":3000", Router()))
-	defer db.Close()
 }
 
 func Router() http.Handler {
@@ -54,60 +82,47 @@ func NoContent(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.Stat
 
 func Create(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	/* fmt.Println(vars) */
 
 	if len(vars) == 0 {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	} /* 204 */
 
-	body, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "Error reading request body", http.StatusBadRequest)
-		return
-	} /* 400 */
-
-	/* parse the request body as JSON */
-	var requestBody Body
-	err = json.Unmarshal(body, &requestBody)
-	if err != nil {
-		http.Error(w, "Error parsing request body", http.StatusBadRequest)
+	var track Track_json
+	if err := json.NewDecoder(r.Body).Decode(&track); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest) /* 400 */
 		return
 	}
 
-	// extract the value of the @input parameter from the request body
-	inputValue := requestBody.Input
-	fmt.Println("@input value:", inputValue)
-
-	query, err := db.Prepare("INSERT INTO tracks (name, song) VALUES (?, ?)")
+	query, err := db.Prepare("REPLACE INTO Tracks (Name, Audio) VALUES (?, ?)")
 	defer query.Close()
 
-	// TODO: this doesn't work :(
-	/*_, err = query.Exec(name, audio)
+	//fmt.Println(track.Audio)
+	_, err = query.Exec(track.Id, track.Audio)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError) /* 500 */
-	//return
-	//}
+		return
+	}
 	w.WriteHeader(http.StatusCreated)
 }
 
 func List(w http.ResponseWriter, r *http.Request) {
 	// SQL request
-	tracks, err := db.Query("SELECT name FROM tracks")
+	tracks, err := db.Query("SELECT Name FROM tracks")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError) /* 500 */
 	}
 	defer tracks.Close()
 
 	// Collect query results into a string.
-	var list string
+	var track_list []string
 	for tracks.Next() {
-		var name string
-		if tracks.Scan(&name) != nil {
+		var track string
+		if tracks.Scan(&track) != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError) /* 500 */
 			return
 		}
-		list = list + ", " + name
+		track_list = append(track_list, track)
 	}
 	if tracks.Err() != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError) /* 500 */
@@ -115,8 +130,8 @@ func List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// If no errors have occured, HTTP response with songs list is sent.
-	w.Header().Set("Songs", list)
-	w.WriteHeader(http.StatusOK) /* 200 */
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(track_list)
 }
 
 func Read(w http.ResponseWriter, r *http.Request) {
@@ -129,7 +144,7 @@ func Read(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var song string
-	err := db.QueryRow("SELECT song FROM tracks WHERE name = ?", name).Scan(&song)
+	err := db.QueryRow("SELECT Audio FROM Tracks WHERE Name = ?", name).Scan(&song)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "Track not found", http.StatusNotFound) /* 404 */
@@ -141,7 +156,7 @@ func Read(w http.ResponseWriter, r *http.Request) {
 	}
 
 	/* Create JSON object with fetched song, convert to JSON bytes so it can be included in HTTP response*/
-	json_response := Song_json{ID: name, Audio: song}
+	json_response := Track{Name: name, Audio: song}
 	jsonBytes, err := json.Marshal(json_response)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError) /* 500 */
@@ -149,7 +164,6 @@ func Read(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(jsonBytes)
-	w.WriteHeader(http.StatusOK) /* 200 OK, return JSON object with ID and Base64 WAV */
 }
 
 func Delete(w http.ResponseWriter, r *http.Request) {
@@ -161,7 +175,7 @@ func Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query, err := db.Exec("DELETE FROM tracks WHERE name = ?", name)
+	query, err := db.Exec("DELETE FROM tracks WHERE Name = ?", name)
 	rowsAffected, err := query.RowsAffected()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError) /* 500 */
