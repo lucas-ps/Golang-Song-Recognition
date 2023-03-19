@@ -14,7 +14,7 @@ import (
 
 var db *sql.DB
 
-/* Struct to represent the body of a request */
+/* Structs needed for database and JSON operations */
 type Body struct {
 	Input string `json:"@input"`
 }
