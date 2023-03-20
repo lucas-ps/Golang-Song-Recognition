@@ -1,1 +1,7 @@
-/.DS_Store
+test_scripts/
+test_scripts/
+test_scripts/
+.DS_Store
+test_scripts/.DS_Store
+test_scripts/input
+test_scripts/script5.sh
