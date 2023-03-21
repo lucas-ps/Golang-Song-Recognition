@@ -1,5 +1,5 @@
 #!/bin/sh
-ID="~Everybody+(Backstreet's+Back)+(Radio+Edit)"
+ID="a1"
 AUDIO=`base64 -i "$ID".wav`
 URL=localhost:3002/cooltown
 echo "{ \"Audio\":\"$AUDIO\" }" > input
