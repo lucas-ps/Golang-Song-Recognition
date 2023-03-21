@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	KEY = "f10fd1bd494f2787828293277f77e884" /* Insert own audd.io API key here */
+	KEY = "test" /* Insert own audd.io API key here */
 )
 
 type Audio_json struct {
