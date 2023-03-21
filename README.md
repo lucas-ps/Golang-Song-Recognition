@@ -7,7 +7,7 @@ This project was done for my final year Enterprise Computing module Continuous A
 
 ## Usage
 
-To run each microservice, open a terminal in their respective folder and run ``` go run``` then the filename. eg:
+To run each microservice, open a terminal in their respective folder and run ```go run``` then the filename. eg:
 
 ```
 go run Tracks.go
