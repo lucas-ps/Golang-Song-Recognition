@@ -20,7 +20,7 @@ type Body struct {
 }
 
 type Track struct {
-	Name  string
+	Id    string
 	Audio string
 }
 
@@ -52,26 +52,23 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	//fmt.Println("Tracks DB created successfully")
 
 	// Add test record
 	/*_, err = db.Exec("INSERT INTO Tracks (Name, Audio) VALUES ('test', 'test');")
 	if err != nil {
 		log.Fatal(err)
-	}
-	fmt.Println("Test track record created successfully")*/
+	}*/
 
 	log.Fatal(http.ListenAndServe(":3000", Router()))
 }
 
 func Router() http.Handler {
 	r := mux.NewRouter()
-	/* Create */
+	/* Put */
 	r.HandleFunc("/tracks/{Id}", Create).Methods("PUT")
 	r.HandleFunc("/tracks/", NoContent).Methods("PUT")
-	/* List */
+	/* Get */
 	r.HandleFunc("/tracks", List).Methods("GET")
-	/* Read */
 	r.HandleFunc("/tracks/{Id}", Read).Methods("GET")
 	/* Delete */
 	r.HandleFunc("/tracks/{Id}", Delete).Methods("DELETE")
@@ -147,7 +144,7 @@ func Read(w http.ResponseWriter, r *http.Request) {
 	err := db.QueryRow("SELECT Audio FROM Tracks WHERE Name = ?", name).Scan(&song)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			http.Error(w, "Track not found", http.StatusNotFound) /* 404 */
+			http.Error(w, "Track not found in database", http.StatusNotFound) /* 404 */
 			return
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError) /* 500 */
@@ -156,7 +153,7 @@ func Read(w http.ResponseWriter, r *http.Request) {
 	}
 
 	/* Create JSON object with fetched song, convert to JSON bytes so it can be included in HTTP response*/
-	json_response := Track{Name: name, Audio: song}
+	json_response := Track{Id: name, Audio: song}
 	jsonBytes, err := json.Marshal(json_response)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError) /* 500 */
@@ -182,7 +179,7 @@ func Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if rowsAffected == 0 {
-		http.Error(w, "Item not found", http.StatusNotFound) /* 404 */
+		http.Error(w, "Specified track not found in database", http.StatusNotFound) /* 404 */
 		return
 	}
 	w.WriteHeader(http.StatusNoContent) /* 204 No Content */

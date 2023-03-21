@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	//"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -10,7 +11,7 @@ import (
 )
 
 const (
-	KEY = "test"
+	KEY = "f10fd1bd494f2787828293277f77e884" /* Insert own audd.io API key here */
 )
 
 type Audio_json struct {
@@ -38,9 +39,11 @@ func Router() http.Handler {
 func Search(w http.ResponseWriter, r *http.Request) {
 	var audio_json Audio_json
 	if err := json.NewDecoder(r.Body).Decode(&audio_json); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest) /* 400 */
+		http.Error(w, "Error decoding audio: "+err.Error(), http.StatusBadRequest) /* 400 */
 		return
 	}
+
+	//fmt.Println(audio_json.Audio)
 
 	// Prepare params
 	params := url.Values{}
@@ -55,10 +58,12 @@ func Search(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
+	// Decode response
 	var data map[string]interface{}
 	err = json.NewDecoder(resp.Body).Decode(&data)
 	if err != nil {
 		http.Error(w, "Error reading response from audd.io", http.StatusInternalServerError) /* 500 */
+		return
 	}
 
 	if data["status"].(string) != "success" {
